@@ -36,6 +36,9 @@ int tcp_sock = 0; // Socket TCP
 
 int status; // Ens diu el estat del client
 
+bool debug_mode = false;
+char debug_str[500];
+
 struct sockaddr_in addr_server_udp, addr_cli_udp;
 struct sockaddr_in addr_server_tcp, addr_cli_tcp;
 
@@ -154,6 +157,7 @@ void print_message();
 bool isValidPDU();
 void send_data();
 void get_file();
+void debug_log();
 
 double timePassed(){
     double t = (double)(end_t - start_t) / CLOCKS_PER_SEC;
@@ -229,7 +233,7 @@ void setupTCP(){
             exit(-1);
         }
 
-        printf("\n**** Socket TCP Inicialitzat! ****\n");
+        debug_log("**** Socket TCP Inicialitzat! ****");
     }
 }
 
@@ -312,7 +316,7 @@ void build_TCP_PDU(struct PDU_TCP* pdu, int mnemonic, char buffer[]){
 
         break;
     default:
-        printf("\nTipus de paquet TCP no vàlid\n");
+        debug_log("Tipus de paquet TCP no vàlid");
         break;
     }
 }
@@ -333,14 +337,14 @@ bool handle_tcp_packet(){ // Retorna true si el paquet TCP a tractar es de tipus
                 //i en el camp data el nom de l’arxiu que es guardarà en el servidor (<id_equip>.cfg)
                 if(strcmp(filename, pdu_tcp_recv.data) == 0){
                     //es passarà a enviar l’arxiu de configuració amb paquets [SEND_DATA] (un per línia)
-                    printf("\nS'ha rebut un [SEND_ACK] vàlid\n");
+                    debug_log("S'ha rebut un [SEND_ACK] vàlid");
                     send_data(); // un cop rebut el [SEND_ACK] podem començar a enviar l'arxiu linia a linia
                 }
             }
 
             else
             {
-                printf("\nS'ha rebut un [SEND_ACK] amb camps de PDU no correctes\n");
+                debug_log("S'ha rebut un [SEND_ACK] amb camps de PDU no correctes");
             }
 
             return true;
@@ -399,8 +403,8 @@ void get_file(){
         }
 
         if(activity == 0){ //salta el timeout
-            printf("\nNo hi ha hagut comunicació amb el servidor TCP\n");
-            printf("\nEs finalitzarà la conexió TCP\n");
+            debug_log("No hi ha hagut comunicació amb el servidor TCP");
+            debug_log("Es finalitzarà la conexió TCP");
 
             close(tcp_sock);
             tcp_sock = 0;
@@ -418,8 +422,8 @@ void get_file(){
                 }
 
                 if(activity == 0){ //Conexió finalitzada remotament
-                    printf("\nNo hi ha hagut comunicació amb el servidor TCP\n");
-                    printf("\nEs finalitzarà la conexió TCP\n");
+                    debug_log("No hi ha hagut comunicació amb el servidor TCP");
+                    debug_log("Es finalitzarà la conexió TCP");
 
                     close(tcp_sock);
                     tcp_sock = 0;
@@ -427,7 +431,8 @@ void get_file(){
                     break;
                 }
 
-                printf("\nRebut: Bytes=%lu, type=%i, nom=%s, mac=%s, random=%s, dades=%s", sizeof(pdu_tcp_recv), pdu_tcp_recv.type, pdu_tcp_recv.id, pdu_tcp_recv.MAC_addr, pdu_tcp_recv.random_num, pdu_tcp_recv.data);
+                sprintf(debug_str, "Rebut: Bytes=%lu, type=%i, nom=%s, mac=%s, random=%s, dades=%s", sizeof(pdu_tcp_recv), pdu_tcp_recv.type, pdu_tcp_recv.id, pdu_tcp_recv.MAC_addr, pdu_tcp_recv.random_num, pdu_tcp_recv.data);
+                debug_log(debug_str);
 
                 if(pdu_tcp_recv.type == GET_DATA){
                     if(isValidPDU(pdu_tcp_recv, registryPDU)){
@@ -436,52 +441,13 @@ void get_file(){
                 }
 
                 if(pdu_tcp_recv.type == GET_END){
-                    printf("\nArxiu de configuració rebut: %s\n", network_cfg_file);
+                    sprintf(debug_str, "Arxiu de configuració rebut: %s", network_cfg_file);
+                    debug_log(debug_str);
                     tcp_sock = 0;
                     break;
                 }
         }
     }
-
-    /*
-    start_t = clock();
-    while (true)
-    {
-        num_bytes = recv(tcp_sock, &pdu_tcp_recv, sizeof(pdu_tcp_recv), 0);
-        if(num_bytes < 0){
-            perror("\nError al recv\n");
-            exit(-1);
-        }
-
-        if(num_bytes == 0){
-            end_t = clock();
-            if(timePassed() >= commandTimers.w){
-                printf("\nNo hi ha hagut comunicació amb el servidor TCP\n");
-                printf("\nEs finalitzarà la conexió TCP\n");
-
-                close(tcp_sock);
-                tcp_sock = 0;
-
-                break;
-            }
-        }
-
-        else{
-            printf("\nRebut: Bytes=%lu, type=%i, nom=%s, mac=%s, random=%s, dades=%s", sizeof(pdu_tcp_recv), pdu_tcp_recv.type, pdu_tcp_recv.id, pdu_tcp_recv.MAC_addr, pdu_tcp_recv.random_num, pdu_tcp_recv.data);
-
-            if(pdu_tcp_recv.type == GET_DATA){
-                if(isValidPDU(pdu_tcp_recv, registryPDU)){
-                    fputs(pdu_tcp_recv.data, fp);
-                }
-            }
-
-            if(pdu_tcp_recv.type == GET_END){
-                printf("\nArxiu de configuració rebut: %s\n", network_cfg_file);
-                break;
-            }
-        }
-    }*/
-    
 
     fclose(fp);
 }
@@ -505,7 +471,7 @@ void send_data(){
         build_TCP_PDU(&pdu_tcp_send, SEND_DATA, buffer); //Creem el paquet [SEND_DATA]
 
         num_bytes = send(tcp_sock, &pdu_tcp_send, sizeof(pdu_tcp_send), 0); //Enviem el paquet
-        printf("\nS'ha enviat un paquet [SEND_DATA]\n");
+        debug_log("S'ha enviat un paquet [SEND_DATA]");
 
         if(num_bytes < 0){
             perror("\nError al enviar\n");
@@ -517,7 +483,7 @@ void send_data(){
 
     /* Finalitzem la transmisió enviant un [SEND_END] */
     build_TCP_PDU(&pdu_tcp_send, SEND_END, NULL);
-    printf("\nS'ha enviat un paquet [SEND_END]\n");
+    debug_log("S'ha enviat un paquet [SEND_END]");
     num_bytes = send(tcp_sock, &pdu_tcp_send, sizeof(pdu_tcp_send), 0);
 
     if(num_bytes < 0){
@@ -525,14 +491,14 @@ void send_data(){
         exit(-1);
     }
 
-    printf("\nArxiu de configuració enviat\n");
+    debug_log("Arxiu de configuració enviat");
 
     tcp_sock = 0;
     fclose(fp); //Tanquem el fitxer
 }
 
 void send_conf(){
-    printf("\n SEND CONF \n");
+    debug_log("SEND CONF");
 
     build_TCP_PDU(&pdu_tcp_send, SEND_FILE, NULL); //Crear paquet SEND_FILE
     int num_bytes = send(tcp_sock, &pdu_tcp_send, sizeof(pdu_tcp_send), 0);
@@ -567,8 +533,8 @@ void send_conf(){
         }
 
         if(activity == 0){ //salta el timeout
-            printf("\nNo hi ha hagut comunicació amb el servidor TCP\n");
-            printf("\nEs finalitzarà la conexió TCP\n");
+            debug_log("No hi ha hagut comunicació amb el servidor TCP");
+            debug_log("Es finalitzarà la conexió TCP");
 
             close(tcp_sock);
             tcp_sock = 0;
@@ -586,8 +552,8 @@ void send_conf(){
             }
 
             if(activity == 0){ //Conexió finalitzada remotament
-                printf("\nNo hi ha hagut comunicació amb el servidor TCP\n");
-                printf("\nEs finalitzarà la conexió TCP\n");
+                debug_log("No hi ha hagut comunicació amb el servidor TCP");
+                debug_log("Es finalitzarà la conexió TCP");
 
                 close(tcp_sock);
                 tcp_sock = 0;
@@ -595,71 +561,30 @@ void send_conf(){
                 break;
             }
 
-            printf("\nRebut: Bytes=%lu, type=%i, nom=%s, mac=%s, random=%s, dades=%s", sizeof(pdu_tcp_recv), pdu_tcp_recv.type, pdu_tcp_recv.id, pdu_tcp_recv.MAC_addr, pdu_tcp_recv.random_num, pdu_tcp_recv.data);
+            sprintf(debug_str, "Rebut: Bytes=%lu, type=%i, nom=%s, mac=%s, random=%s, dades=%s", sizeof(pdu_tcp_recv), pdu_tcp_recv.type, pdu_tcp_recv.id, pdu_tcp_recv.MAC_addr, pdu_tcp_recv.random_num, pdu_tcp_recv.data);
+            debug_log(debug_str);
 
             if(!handle_tcp_packet()){ //En cas que la resposta del paquet [SEND_FILE] no sigui un [SEND_ACK]
                 //s’informarà del motiu (indicat en el camp data de la PDU) i es finalitzarà la comunicació TCP amb el servidor.
-                printf("\n%s\n", pdu_tcp_recv.data);
+                sprintf(debug_str, "%s", pdu_tcp_recv.data);
+                debug_log(debug_str);
 
                 close(tcp_sock);
                 tcp_sock = 0;
             }
         }
     }
-
-    /*
-    start_t = clock();
-    while (true)
-    {
-        num_bytes = recv(tcp_sock, &pdu_tcp_recv, sizeof(pdu_tcp_recv), 0);
-
-        printf("num_bytes: %i", num_bytes);
-
-        if(num_bytes < 0){
-            perror("\nError al recv\n");
-            exit(-1);
-        }
-
-        if(num_bytes == 0){ // No es rep resposta del recv 
-
-            end_t = clock();
-
-            if(timePassed() >= commandTimers.w){
-                printf("\nNo hi ha hagut comunicació amb el servidor TCP\n");
-                printf("\nEs finalitzarà la conexió TCP\n");
-
-                close(tcp_sock);
-                tcp_sock = 0;
-
-                break;
-            }
-        }
-
-        else{ // S'ha rebut resposta 
-            printf("\nRebut: Bytes=%lu, type=%i, nom=%s, mac=%s, random=%s, dades=%s", sizeof(pdu_tcp_recv), pdu_tcp_recv.type, pdu_tcp_recv.id, pdu_tcp_recv.MAC_addr, pdu_tcp_recv.random_num, pdu_tcp_recv.data);
-
-            if(!handle_tcp_packet()){ //En cas que la resposta del paquet [SEND_FILE] no sigui un [SEND_ACK]
-                //s’informarà del motiu (indicat en el camp data de la PDU) i es finalitzarà la comunicació TCP amb el servidor.
-                printf("\n%s\n", pdu_tcp_recv.data);
-
-                close(tcp_sock);
-                tcp_sock = 0;
-            }
-
-            break;
-        }
-    }*/
     
 }
 
 void get_conf(){
-    printf("\n GET CONF \n");
+    debug_log("GET CONF");
 
     int num_bytes = 0;
 
     build_TCP_PDU(&pdu_tcp_send, GET_FILE, NULL);
     num_bytes = send(tcp_sock, &pdu_tcp_send, sizeof(pdu_tcp_send), 0);
-    printf("\nPaquet [GET_FILE] enviat\n");
+    debug_log("Paquet [GET_FILE] enviat");
 
     if(num_bytes < 0){
         perror("\nError al send\n");
@@ -690,8 +615,8 @@ void get_conf(){
         }
 
         if(activity == 0){ //salta el timeout
-            printf("\nNo hi ha hagut comunicació amb el servidor TCP\n");
-            printf("\nEs finalitzarà la conexió TCP\n");
+            debug_log("No hi ha hagut comunicació amb el servidor TCP");
+            debug_log("Es finalitzarà la conexió TCP");
 
             close(tcp_sock);
             tcp_sock = 0;
@@ -709,8 +634,8 @@ void get_conf(){
             }
 
             if(activity == 0){ //Conexió finalitzada remotament
-                printf("\nNo hi ha hagut comunicació amb el servidor TCP\n");
-                printf("\nEs finalitzarà la conexió TCP\n");
+                debug_log("No hi ha hagut comunicació amb el servidor TCP");
+                debug_log("Es finalitzarà la conexió TCP");
 
                 close(tcp_sock);
                 tcp_sock = 0;
@@ -718,75 +643,20 @@ void get_conf(){
                 break;
             }
 
-            printf("\nRebut: Bytes=%lu, type=%i, nom=%s, mac=%s, random=%s, dades=%s", sizeof(pdu_tcp_recv), pdu_tcp_recv.type, pdu_tcp_recv.id, pdu_tcp_recv.MAC_addr, pdu_tcp_recv.random_num, pdu_tcp_recv.data);
+            sprintf(debug_str, "Rebut: Bytes=%lu, type=%i, nom=%s, mac=%s, random=%s, dades=%s", sizeof(pdu_tcp_recv), pdu_tcp_recv.type, pdu_tcp_recv.id, pdu_tcp_recv.MAC_addr, pdu_tcp_recv.random_num, pdu_tcp_recv.data);
+            debug_log(debug_str);
 
             if(!handle_tcp_packet()){ //En cas que la resposta del paquet [GET_FILE] no sigui un [GET_ACK]
                 //s’informarà del motiu (indicat en el camp data de la PDU) i es finalitzarà la comunicació TCP amb el servidor.
-                printf("\n%s\n", pdu_tcp_recv.data);
+                sprintf(debug_str, "%s", pdu_tcp_recv.data);
+                debug_log(debug_str);
 
                 close(tcp_sock);
                 tcp_sock = 0;
             }
         }
     }
-
-    /*
-    num_bytes = 0;
-    start_t = clock();
-    while (true)
-    {
-        num_bytes = recv(tcp_sock, &pdu_tcp_recv, sizeof(pdu_tcp_recv), 0);
-        if(num_bytes < 0){
-            perror("\nError al recv\n");
-            exit(-1);
-        }
-
-        if(num_bytes == 0){
-
-            end_t = clock();
-
-            if(timePassed() > commandTimers.w){
-                printf("\nNo hi ha hagut comunicació amb el servidor TCP\n");
-                printf("\nEs finalitzarà la conexió TCP\n");
-
-                close(tcp_sock);
-                tcp_sock = 0;
-
-                break;
-            }
-        }
-
-        else
-        {
-            printf("\nRebut: Bytes=%lu, type=%i, nom=%s, mac=%s, random=%s, dades=%s", sizeof(pdu_tcp_recv), pdu_tcp_recv.type, pdu_tcp_recv.id, pdu_tcp_recv.MAC_addr, pdu_tcp_recv.random_num, pdu_tcp_recv.data);
-            
-            if(!handle_tcp_packet()){ //En cas que la resposta del paquet [GET_FILE] no sigui un [GET_ACK]
-                //s’informarà del motiu (indicat en el camp data de la PDU) i es finalitzarà la comunicació TCP amb el servidor.
-                printf("\n%s\n", pdu_tcp_recv.data);
-
-                close(tcp_sock);
-                tcp_sock = 0;
-            }
-        }
-    }*/
     
-}
-
-void print_message(char* message) {
-    time_t current_time;
-    char* time_string;
-
-    // Get the current time
-    current_time = time(NULL);
-
-    // Convert the current time to a string representation
-    time_string = ctime(&current_time);
-
-    // Remove the newline character from the time string
-    time_string[strlen(time_string) - 1] = '\0';
-
-    // Print the message with the timestamp
-    printf("[%s] %s\n", time_string, message);
 }
 
 void commandProcessing(char command[]){
@@ -796,7 +666,7 @@ void commandProcessing(char command[]){
         pthread_detach(commandThread);
         close(udp_sock);
         close(tcp_sock);
-        printf("\nThreads acabats i sockets tancats\n");
+        debug_log("Threads acabats i sockets tancats");
         exit(1);
         pthread_exit(NULL);
     }
@@ -815,7 +685,8 @@ void commandProcessing(char command[]){
 
     else{
         print_message("Commanda invàlida");
-        printf("\n---\n%s\n---\n", command);
+        sprintf(debug_str, "---%s---", command);
+        debug_log(debug_str);
         //exit(-1);
     }
     
@@ -827,12 +698,11 @@ void readCommands(){
     //memset(command, '\0', sizeof(command)); // Per inicialitzar el string com buit
 
     while(true){
-        printf("\n-> ");
         scanf("%9s", command);
         commandProcessing(command);
 
         if(status == DISCONNECTED){
-            printf("\n\nAcabant amb el fil de commandes degut a que s'ha passat al estat [DISCONNECTED]\n\n");
+            debug_log("Acabant amb el fil de commandes degut a que s'ha passat al estat [DISCONNECTED]");
             pthread_detach(commandThread);
             pthread_exit(NULL);
         }
@@ -840,9 +710,6 @@ void readCommands(){
 }
 
 void *commandPhase(){
-
-    int input;
-    while ((input = getchar()) != '\n' && input != EOF);
 
     readCommands();
     return NULL;
@@ -855,7 +722,7 @@ void *send_ALIVE_INF(){
     // Enviar un paquet ALIVE_INF cada r segons
     while (true)
     {
-        printf("\nEnviant paquet: [ALIVE_INF]\n");
+        debug_log("Enviant paquet: [ALIVE_INF]");
         int a = sendto(udp_sock, &pdu_udp_send, UDP_PACKAGE_SIZE, 0, (struct sockaddr*)&addr_server_udp,sizeof(addr_server_udp));
         if(a<0){
             {
@@ -865,7 +732,8 @@ void *send_ALIVE_INF(){
         }
 
         current_packet += 1;
-        printf("current_packet: %i\n", current_packet);
+        sprintf(debug_str, "current_packet: %i", current_packet);
+        debug_log(debug_str);
 
         sleep(aliveTimers.r);
 
@@ -873,8 +741,9 @@ void *send_ALIVE_INF(){
         //consecutius interpretarà que hi ha problemes de comunicació amb el servidor, 
         //passarà a l’estat DISCONNECTED i iniciarà un nou procés de registre.
         if(current_packet >= aliveTimers.s){
-            printf("\nno s'ha rebut confirmació després d'enviar %i paquets consecutius", aliveTimers.s);
-            printf("\nel client passa al estat: [DISCONNECTED]\n\n");
+            printf(debug_str, "no s'ha rebut confirmació després d'enviar %i paquets consecutius", aliveTimers.s);
+            debug_log(debug_str);
+            print_message("el client passa al estat: [DISCONNECTED]");
             status = DISCONNECTED;
 
             current_packet = 0;
@@ -943,8 +812,6 @@ void aliveProcedure(){
 
         else{ //There's activity on the socket
 
-            printf("S'ha rebut alguna cosa al socket \n");
-
             int a = recvfrom(udp_sock, &pdu_udp_recv, UDP_PACKAGE_SIZE, 0, (struct sockaddr *) 0, (unsigned int *) 0);
             if(a<0)
             {
@@ -956,14 +823,14 @@ void aliveProcedure(){
 
             if(type == ALIVE_ACK){
                 //*en els packets alive el camp de dades ha d'estar buit
-                printf("\n[ALIVE_ACK]: ");
+                debug_log("rebut [ALIVE_ACK]");
 
                 //struct PDU_UDP aliveRecvPDU;
                 //arr_to_pdu_UDP(recvBuffUDP, &aliveRecvPDU);
 
                 // (*) Comprovar que els camps de la PDU corresponen amb les dades obtingudes en la fase de registre
                 if(isMatchPDU(registryPDU, pdu_udp_recv)){
-                    printf("els paquets de la fase de registre i del alive coincideixen \n");
+                    debug_log("els paquets de la fase de registre i del alive coincideixen");
                     num_alive_ack_recieved += 1;
 
                     //resetejem el contador de paquets alive_inf consecutius
@@ -971,12 +838,12 @@ void aliveProcedure(){
 
                     //En rebre el primer [ALIVE_ACK] correcte el servidor passarà a l'estat ALIVE
                     if(num_alive_ack_recieved == 1){
-                        printf("\nEl client passa al estat [SEND_ALIVE]\n");
+                        print_message   ("El client passa al estat [SEND_ALIVE]");
                         status = SEND_ALIVE;
                     }
                 }
                 else{
-                    printf("Els paquets de la fase de registre i del alive no coincideixen! No es farà cas del paquet rebut\n");
+                    debug_log("Els paquets de la fase de registre i del alive no coincideixen! No es farà cas del paquet rebut");
                     //No es fara cas del paquet rebut
                 }
             }
@@ -985,8 +852,8 @@ void aliveProcedure(){
             //de suplantació d’identitat, el client passarà a l’estat DISCONNECTED i iniciarà un nou
             //procés de registre
             if(type == ALIVE_REJ){
-                printf("\n[ALIVE_REJ]: s'interpreta com intent de suplantació d'identitat");
-                printf("\nEl client passa al estat: [DISCONNECTED]");
+                debug_log("[ALIVE_REJ]: s'interpreta com intent de suplantació d'identitat");
+                print_message("\nEl client passa al estat: [DISCONNECTED]");
                 status = DISCONNECTED;
                 break;
             }
@@ -994,7 +861,7 @@ void aliveProcedure(){
 
             if(type == ALIVE_NACK){
                 //No es tenen en compte, es considera com no haver rebut resposta del servidor
-                printf("\n[ALIVE_NACK]\n");
+                debug_log("[ALIVE_NACK] rebut");
             }
 
             /*---------------------------------------------------------------*/
@@ -1053,11 +920,11 @@ void registryRequest(){
             exit(-2);
         }
     }
-    printf("\nS'ha enviat [REGISTER_REQ]\n");
+    debug_log("S'ha enviat [REGISTER_REQ]");
 
     if(first_registry_request == true){
         status = WAIT_REG_RESPONSE; // En enviar el primer paquet [REGISTER_REQ] el client passarà a estat WAIT_REG_RESPONSE.
-        printf("\nEl client passa al estat: [WAIT_REG_RESPONSE]\n");
+        print_message("El client passa al estat: [WAIT_REG_RESPONSE]");
 
         first_registry_request = false;
     }
@@ -1072,7 +939,7 @@ void registryProcedure(){
 
     int activity = 0; // guarda l'estat del select
 
-    printf("\n*** INICIANT NOU PROCÉS DE REGISTRE *** \n\n");
+    debug_log("*** INICIANT NOU PROCÉS DE REGISTRE ***");
 
     while (activity == 0) // mentres salti el timeout del select (no es rep res)
     {
@@ -1099,8 +966,9 @@ void registryProcedure(){
         } else if (activity == 0) {
 
             // Timeout occurred
-            printf("TIMEOUT (seconds: %i) \n", interval);
-            printf("es tornarà a enviar la petició de registre \n\n");
+            sprintf(debug_str, "TIMEOUT (seconds: %i)", interval);
+            debug_log(debug_str);
+            debug_log("es tornarà a enviar la petició de registre");
 
             //Si no rep resposta del servidor en t segons tornarà a enviar la petició de registre 
 
@@ -1109,7 +977,8 @@ void registryProcedure(){
 
             // (*) Si els paquets enviats es superior a el nombre de p primers paquets
             if(current_packet > registryTimers.p){
-                printf("el nombre de paquets enviats es superior a p: [%i] \n\n", registryTimers.p);
+                sprintf(debug_str, "el nombre de paquets enviats es superior a p: [%i]", registryTimers.p);
+                debug_log(debug_str);
                 // Per cada paquet posterior a p l’interval d’enviament s’incrementarà en t segons
                 // fins arribar a q * t segons a partir dels quals l’interval d’enviament es mantindrà
                 // constant en aquest valor (q * t).
@@ -1124,7 +993,7 @@ void registryProcedure(){
             //  s’espera u segons i s’inicia un nou procés de registre.
             if(current_packet > registryTimers.n){ 
                 interval = registryTimers.u;
-                printf("S'iniciarà un nou procés de registre si s'escau\n");
+                debug_log("S'iniciarà un nou procés de registre si s'escau");
                 break; // -> Per iniciar un nou procés de registre
             }
             
@@ -1135,7 +1004,6 @@ void registryProcedure(){
 
         } else {
             // There is activity on the socket
-            printf("S'ha rebut alguna cosa al socket \n");
 
             int a = recvfrom(udp_sock, &pdu_udp_recv, UDP_PACKAGE_SIZE, 0, (struct sockaddr *) 0, (unsigned int *) 0);
             if(a<0)
@@ -1145,10 +1013,12 @@ void registryProcedure(){
             }
 
             int type = pdu_udp_recv.type;
+            char data[50];
+            strncpy(data, pdu_udp_recv.data, sizeof(data));
 
             if(type == REGISTER_ACK){
-                printf("[REGISTER_ACK]: ");
-                printf("El client passa al status : [REGISTERED] \n");
+                debug_log("S'ha rebut: [REGISTER_ACK]");
+                print_message("El client passa al status: [REGISTERED]");
 
                 //Ens guardem el port rebut per a les comunicacions TCP amb el servidor
                 //struct PDU_UDP registryPDU;
@@ -1158,14 +1028,13 @@ void registryProcedure(){
                 status = REGISTERED;
             }
             if(type == REGISTER_NACK){
-                printf("[REGISTER_NACK]: es finalitzarà el procés de registre actual\n");
+                debug_log("[REGISTER_NACK]: es finalitzarà el procés de registre actual");
                 break; // -> Finalitzar el procés de registre actual
             }
             if(type == REGISTER_REJ){
-                printf("[REGISTER_REJ]: ");
-                printf("El registre ha estat rebutjat! \n");
+                sprintf(debug_str, "[REGISTER_REJ]: %s", data);
+                debug_log(debug_str);
                 exit(-1);
-                //TODO: explicar motiu del rebuig (?)
             }
             if(type == ALIVE_ACK){
                 break;
@@ -1184,6 +1053,9 @@ void registerPhase(){
     //client finalitzarà indicant que no s’ha pogut contactar amb el servidor.
     while (num_tries <= registryTimers.o && status != REGISTERED)
     {
+        sprintf(debug_str, "Registre equip, intent: %i", num_tries);
+        debug_log(debug_str);
+
         registryRequest();
         registryProcedure();
         num_tries += 1;
@@ -1205,7 +1077,7 @@ void registerPhase(){
     }
     else
     {
-        printf("\nNo s'ha pogut conectar amb el servidor! \n");
+        debug_log("\nNo s'ha pogut conectar amb el servidor! \n");
         exit(-1);
     }
 }
@@ -1230,13 +1102,44 @@ void readParameters(int argc, char const *argv[]){
 
         if(strcmp(argv[i], "-d") == 0){
             //i++;
-            //argv[i] -> conté el nivell de debug
-            // TODO: Implementar-ho
+            debug_mode = true;
+            debug_log("Mode debug activat!");
         }
     }
     
 
+    debug_log("Llegits parametres linia de comandes");
 }
+
+void debug_log(char *message) {
+    if (debug_mode) {
+        time_t current_time;
+        char timestamp[20];
+        struct tm *time_info;
+
+        time(&current_time);
+        time_info = localtime(&current_time);
+
+        strftime(timestamp, sizeof(timestamp), "%d-%m-%Y %H:%M:%S", time_info);
+
+        printf("[DEBUG %s] %s\n", timestamp, message);
+    }
+}
+
+
+void print_message(char* message) {
+    time_t current_time;
+    char timestamp[20];
+    struct tm *time_info;
+
+    time(&current_time);
+    time_info = localtime(&current_time);
+
+    strftime(timestamp, sizeof(timestamp), "%d-%m-%Y %H:%M:%S", time_info);
+
+    printf("[SYSTEM %s] %s\n", timestamp, message);
+}
+
 
 void saveConfig(char filename[]){
 
@@ -1296,7 +1199,8 @@ void saveConfig(char filename[]){
             continue;
         }
     }
-
+    sprintf(debug_str, "S'ha llegit l'arxiu de dades de configuració del software: %s", filename);
+    debug_log(debug_str);
     fclose(fp);
 
 }
@@ -1313,6 +1217,7 @@ void debugConfigVars(){
 int main(int argc, char const *argv[])
 {
     status = DISCONNECTED; // El client partirà del estat DISCONNECTED
+    print_message("L'equip passa al estat [DISCONNECTED]");
 
     readParameters(argc, argv);
     saveConfig(client_cfg_file);
